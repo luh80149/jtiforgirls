@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JTI 雙園女子周日籃球聯盟</title>
+
+  <style>
+    body { margin: 0; font-family: sans-serif; background: #fafafa; }
+    header { text-align: center; padding: 10px 0; background: #222; color: #fff; }
+
+    /* 輪播 */
+    .carousel { width: 100%; height: 250px; overflow: hidden; position: relative; }
+    .carousel img { width: 100%; height: 250px; object-fit: cover; position: absolute; transition: opacity 1s; opacity: 0; }
+
+    /* 主選單 */
+    nav {
+      display: flex;
+      justify-content: center;
+      background: #333;
+      position: relative;      /* 保證 submenu 以 nav 為基準 */
+      z-index: 5;             /* 讓 nav 站在輪播上方 */
+    }
+
+    nav button, nav a {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      background: #333;
+      color: #fff;
+      cursor: pointer;
+      font-size: 16px;
+      text-decoration: none;
+      text-align: center;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      white-space: nowrap; 
+    }
+
+    nav button:hover, nav a:hover { background: #444; }
+
+    /* 讓 YouTube 連結保持其特色顏色 */
+    nav a.youtube-link {
+        background: #CC0000;
+    }
+    nav a.youtube-link:hover {
+        background: #E60000;
+    }
+
+    /* 子選單 */
+    .submenu {
+      display: none; /* 預設隱藏 */
+      background: #444;
+      padding: 10px 0;
+      position: absolute;
+      width: 100%;
+      left: 0;
+      text-align: center;
+      z-index: 4;
+    }
+
+    .submenu-inner {
+      display: flex;
+      justify-content: center;
+      max-width: 800px;
+      margin: 0 auto;
+      gap: 10px; /* 按鈕間距 */
+    }    
+
+    .submenu button {
+      color: #fff;
+      background: #555;
+      border: none;
+      margin: 0 6px;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
+    }
+
+    .submenu button:hover { background: #666; }
+
+    .content { padding: 15px; max-width: 1000px; margin: auto; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; background:white; }
+    table th, table td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+    table th { background: #eee; font-weight: bold; }
+
+    h3 { margin-top: 0; }
+
+    /* 🌟 最新消息列表樣式 */
+    .news-item {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-left: 5px solid #6c757d;
+        background: #f0f0f0;
+        border-radius: 4px;
+    }
+    .news-item.urgent {
+        border-left: 5px solid #333;
+        background: #e8e8e8;
+    }
+    .news-subject { font-weight: bold; color: #333; margin-bottom: 5px; }
+    .news-date { font-size: 0.8em; color: #6c757d; display: block; margin-bottom: 5px; }
+    .news-link { color: #495057; font-weight: bold; text-decoration: none; }
+    .news-link:hover { text-decoration: underline; }
+  </style>
+</head>
+
+<body>
+
+ <!-- 輪播 -->
+  <div class="carousel" id="carousel"></div>
+
+  <header>
+    <h2>JTI雙園女子周日籃球聯盟</h2>
+  </header>
+
+  <!-- ⭐ 主選單 -->
+  <nav>
+    <button onclick="showPage('news')">最新消息</button>
+
+    <!-- ⭐ 新增：賽程戰績子選單觸發 -->
+    <button onclick="toggleSubmenu()">賽程戰績</button>
+
+    <button onclick="showPage('history')">歷屆成績</button>
+
+    <!-- ⭐ YouTube Icon（變成紅色 icon） -->
+    <a href="https://www.youtube.com/@MCChuang" target="_blank" rel="noopener noreferrer">
+      ▶️ 賽事頻道
+    </a>
+  </nav>
+
+  <!-- ⭐ 子選單（折疊式） -->
+  <div class="submenu" id="submenu">
+    <button onclick="showPage('schedule')">本季賽程</button>
+    <button onclick="showPage('standing')">目前戰績</button>
+    <button onclick="showPage('teams')">戰績查詢</button>
+  </div>
+
+  <div class="content" id="contentArea"></div>
+
+<script>
+  
+// 🌟 Google Sheets（你的 CSV 連結）
+const CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQJ5ekQkDeP54OqrFvqYxelOI05zCqtoDbCfEbYkLJF58hz_vsQb67FS0uasXZQunro8DS3EL4ZP8yO/pub?gid=0&single=true&output=csv";
+
+// 🌟 最新消息資料陣列
+const NEWS_ITEMS = [
+  {
+    date: "2025/12/01",
+    subject: "📢 2026年第一季比賽開始報名！",
+    content: "2026年第一季聯賽報名正式啟動！請點擊此處進入 Google 表單完成報名手續。",
+    link: "https://forms.gle/kNBJZmj9Degpma3WA",
+    isUrgent: true 
+  },
+  {
+    date: "2025/12/01",
+    subject: "徵徵徵：尋找友誼賽隊伍",
+    content: "12/21、12/28 友誼賽尚有報名名額！不限男女生球隊，將依性別分組，我們誠摯邀請各隊踴躍報名，一起參與友誼賽、切磋球技、共創精彩比賽🎉 比賽由證照裁判掌控、專業記錄台協助，並全程錄影，精彩不漏拍，意者請洽聯賽窗口。",
+    link: "https://forms.gle/kNBJZmj9Degpma3WA",
+    isUrgent: false
+  },
+
+];
+
+// 🌟 輪播
+const carouselImages = ["assets/1.jpg", "assets/2.jpg"];
+let carouselIndex = 0;
+const carouselDiv = document.getElementById("carousel");
+
+carouselImages.forEach((src, i) => {
+  const img = document.createElement("img");
+  img.src = src;
+  if (i === 0) img.style.opacity = 1;
+  carouselDiv.appendChild(img);
+});
+
+setInterval(() => {
+  const imgs = carouselDiv.children;
+  imgs[carouselIndex].style.opacity = 0;
+  carouselIndex = (carouselIndex + 1) % imgs.length;
+  imgs[carouselIndex].style.opacity = 1;
+}, 3000);
+
+
+// 🌟 主/子選單 toggle
+function toggleSubmenu() {
+  const menu = document.getElementById("submenu");
+  menu.style.display = (menu.style.display === "block") ? "none" : "block";
+}
+
+// 🌟主頁切換（你的原始功能）
+function showPage(page) {
+  // 收起子選單
+  document.getElementById("submenu").style.display = "none";
+
+  if (page === "news") renderNews();
+  if (page === "schedule") renderSchedule();
+  if (page === "standing") renderStanding();
+  if (page === "teams") renderTeamSearch();
+  if (page === "history") renderHistory();
+}
+
+
+// 🌟 讀取 CSV
+async function fetchCSV() {
+  const res = await fetch(CSV_URL);
+  const text = await res.text();
+  return text.split(/\r?\n/).map(r => r.split(","));
+}
+
+// ====================================================================
+// ⭐ 0）最新消息
+// ====================================================================
+function renderNews() {
+    const contentArea = document.getElementById("contentArea");
+    let newsHtml = '<h3>最新消息</h3>';
+
+    NEWS_ITEMS.forEach(item => {
+        const urgencyClass = item.isUrgent ? ' urgent' : '';
+        let linkHtml = '';
+        
+        if (item.link) {
+            linkHtml = `
+                <a 
+                    href="${item.link}" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    class="news-link"
+                >
+                    [查看詳情...]
+                </a>
+            `;
+        }
+        
+        newsHtml += `
+            <div class="news-item${urgencyClass}">
+                <span class="news-date">${item.date}</span>
+                <div class="news-subject">${item.subject}</div>
+                <p>${item.content}</p>
+                ${linkHtml}
+            </div>
+        `;
+    });
+    
+    contentArea.innerHTML = newsHtml;
+}
+
+
+// ====================================================================
+// ⭐ 1）賽程表
+// ====================================================================
+function toYYYYMM(dateStr) {
+  return dateStr.slice(0, 6);
+}
+
+function parseDate(d) {
+  return new Date(d.replace(/\//g, "-"));
+}
+
+async function renderSchedule() {
+  const rows = await fetchCSV();
+  const headers = rows[0];
+  let data = rows.slice(1).filter(r => r.length > 1);
+
+  data.sort((a, b) => parseDate(a[0]) - parseDate(b[0]));
+
+  const months = [...new Set(data.map(r => toYYYYMM(r[0])))];
+
+  let html = `<h3>賽程表</h3>
+  <label>依月份篩選：
+    <select id="monthFilter" onchange="filterByMonth()">
+      <option value="all">全部</option>
+  `;
+
+  months.forEach(m => html += `<option value="${m}">${m}</option>`);
+  html += `</select></label>`;
+
+  html += `
+    <table id="scheduleTable">
+      <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+      <tbody>
+  `;
+
+  data.forEach(r => html += `<tr>${r.map(x => `<td>${x}</td>`).join("")}</tr>`);
+  html += `</tbody></table>`;
+
+  document.getElementById("contentArea").innerHTML = html;
+
+  window.fullSchedule = data;
+}
+
+function filterByMonth() {
+  const m = document.getElementById("monthFilter").value;
+  const tbody = document.querySelector("#scheduleTable tbody");
+  tbody.innerHTML = "";
+
+  window.fullSchedule.forEach(r => {
+    if (m === "all" || toYYYYMM(r[0]) === m) {
+      tbody.innerHTML += `<tr>${r.map(x => `<td>${x}</td>`).join("")}</tr>`;
+    }
+  });
+}
+
+
+
+// ====================================================================
+// ⭐ 2）目前戰績（你新增的頁面）
+// ====================================================================
+async function renderStanding() {
+  const rows = await fetchCSV();
+  const data = rows.slice(1).filter(r => r.length > 1);
+
+  // 欄位：日期、時間、組別、隊伍淺、隊伍深、比數、勝隊
+  const GROUP = 2, LIGHT = 3, DARK = 4, SCORE = 5, WINNER = 6;
+
+  // 🔥 找出所有隊伍、依組別分類
+  const groupTeams = { A: new Set(), B: new Set() };
+
+  data.forEach(r => {
+    const g = r[GROUP]?.trim();
+    if (g === "A組") {
+      groupTeams.A.add(r[LIGHT]);
+      groupTeams.A.add(r[DARK]);
+    } else if (g === "B組") {
+      groupTeams.B.add(r[LIGHT]);
+      groupTeams.B.add(r[DARK]);
+    }
+  });
+
+  // 轉成物件格式紀錄戰績
+  function initStanding(teams) {
+    const obj = {};
+    teams.forEach(t => {
+      obj[t] = { played: 0, win: 0, lose: 0, draw: 0 };
+    });
+    return obj;
+  }
+
+  const standingA = initStanding(groupTeams.A);
+  const standingB = initStanding(groupTeams.B);
+
+  // 🔥 計算戰績
+  data.forEach(r => {
+    const g = r[GROUP].trim();
+    const light = r[LIGHT];
+    const dark = r[DARK];
+    const winner = r[WINNER].trim();
+    if (!winner) { // 如果勝隊欄位為空、null、undefined，則跳過此場比賽
+      return; // 繼續下一個迴圈
+    }
+
+    const target = g === "A組" ? standingA : standingB;
+
+    target[light].played++;
+    target[dark].played++;
+
+    if (winner === "平手") {
+      target[light].draw++;
+      target[dark].draw++;
+    } else {
+      target[winner].win++;
+      const loser = winner === light ? dark : light;
+      target[loser].lose++;
+    }
+  });
+
+  // 🔥 生成表格 HTML
+  function buildTable(title, obj) {
+    let html = `<h3>${title}</h3>`;
+    html += `<table><thead>
+      <tr><th>隊伍名稱</th><th>已賽場數</th><th>勝場數</th><th>敗場數</th><th>平手場數</th></tr>
+    </thead><tbody>`;
+
+// 1. 取得所有隊伍名稱 (鍵)
+  const teams = Object.keys(obj);
+
+  // 2. 進行複雜排序
+  teams.sort((a, b) => {
+    const sA = obj[a]; // 隊伍 A 的戰績
+    const sB = obj[b]; // 隊伍 B 的戰績
+
+    // --- 規則 1: 勝場數多的先 (降序) ---
+    if (sA.win !== sB.win) {
+      return sB.win - sA.win; // B - A: 如果 B 比較大 (勝場多)，回傳正數，B 排在前面
+    }
+
+    // --- 規則 2: 已賽數多的先 (降序) ---
+    if (sA.played !== sB.played) {
+      return sB.played - sA.played; // B - A: 如果 B 比較大 (已賽多)，回傳正數，B 排在前面
+    }
+
+    // --- 規則 3: 隊名按筆畫小到大排序 (升序) ---
+    // 使用 String.prototype.localeCompare 進行中文筆畫/字典序排序
+    // 預設就是升序 (小的在前面)，如果 a 應該在 b 前面，回傳負數
+    return a.localeCompare(b, 'zh-Hans-TW', { sensitivity: 'base' });
+  });
+
+  // 3. 按照排序好的 teams 陣列來生成 HTML
+  teams.forEach(t => {
+    const s = obj[t];
+    html += `<tr>
+      <td>${t}</td>
+      <td>${s.played}</td>
+      <td>${s.win}</td>
+      <td>${s.lose}</td>
+      <td>${s.draw}</td>
+    </tr>`;
+  });
+
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  document.getElementById("contentArea").innerHTML =
+    buildTable("A 組目前戰績", standingA) +
+    "<br>" +
+    buildTable("B 組目前戰績", standingB);
+}
+
+
+
+// ====================================================================
+// ⭐ 3）戰績查詢（筆畫排序）
+// ====================================================================
+async function renderTeamSearch() {
+  const rows = await fetchCSV();
+  const data = rows.slice(1);
+
+  const teams = [...new Set(data.flatMap(r => [r[3], r[4]]))].filter(Boolean);
+
+  teams.sort((a, b) => a.localeCompare(b, "zh-Hant"));
+
+  let html = `<h3>戰績查詢</h3>`;
+
+  html += `
+    <label>選擇隊伍：
+      <select id="teamSelect" onchange="filterTeam()">
+        <option value="">請選擇</option>
+  `;
+
+  teams.forEach(t => (html += `<option value="${t}">${t}</option>`));
+
+  html += `</select></label><div id="teamResult"></div>`;
+
+  document.getElementById("contentArea").innerHTML = html;
+
+  window.fullData = data;
+}
+
+function filterTeam() {
+  const team = document.getElementById("teamSelect").value;
+  const result = document.getElementById("teamResult");
+
+  result.innerHTML = "";
+  if (!team) return;
+
+  const rows = window.fullData.filter(r => r[3] === team || r[4] === team);
+
+  let html = `
+    <table>
+      <thead>
+        <tr><th>日期</th><th>時間</th><th>組別</th><th>隊伍淺</th><th>隊伍深</th><th>比數</th><th>勝隊</th></tr>
+      </thead>
+      <tbody>
+  `;
+
+  rows.forEach(r => html += `<tr>${r.map(x => `<td>${x}</td>`).join("")}</tr>`);
+
+  html += `</tbody></table>`;
+  result.innerHTML = html;
+}
+
+
+// ====================================================================
+// ⭐ 4）載入歷屆成績
+// ====================================================================
+
+const HISTORY_CSV_URL =
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vQoTn408A02uDUaRJivPlAs7fRUloehRNYpTv9HO3IOo1BVa7-3T5lUMvhciq3LgI_NToyzVIoEOOuK/pub?output=csv";
+
+// 主畫面載入歷屆成績
+async function renderHistory() {
+    const content = document.getElementById("contentArea");
+
+    content.innerHTML = `
+        <h3>歷屆成績</h3>
+        <label>選擇賽季：
+            <select id="historySelect" onchange="loadHistorySeason()"></select>
+        </label>
+        <div id="historyResult" style="margin-top: 15px;"></div>
+    `;
+
+    await loadHistorySeasonList();
+}
+
+// 讀取 Google Sheet CSV → 建立賽季下拉選單
+async function loadHistorySeasonList() {
+    const res = await fetch(HISTORY_CSV_URL);
+    const text = await res.text();
+
+    const rows = text.split(/\r?\n/).map(r => r.split(","));
+    const data = rows.slice(1).filter(r => r.length > 1);
+
+    // 取得所有賽季（避免重複）
+    const seasons = [...new Set(data.map(r => r[0]))];
+
+    // 排序（時間晚的放前面）
+    seasons.sort().reverse();
+
+    const select = document.getElementById("historySelect");
+    seasons.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s;
+        opt.textContent = s;
+        select.appendChild(opt);
+    });
+
+    // 預設載入最新一季
+    loadHistorySeason();
+}
+
+// 顯示特定賽季的 A、B 組成績
+async function loadHistorySeason() {
+    const season = document.getElementById("historySelect").value;
+
+    const res = await fetch(HISTORY_CSV_URL);
+    const text = await res.text();
+
+    const rows = text.split(/\r?\n/).map(r => r.split(","));
+    const headers = rows[0];
+    const data = rows.slice(1).filter(r => r.length > 1);
+
+    // 篩選挑出該賽季的資料
+    const filtered = data.filter(r => r[0] === season);
+
+    // A / B 組資料
+    const A = filtered.filter(r => r[1] === "A組");
+    const B = filtered.filter(r => r[1] === "B組");
+
+    let html = "";
+
+    // 建立表格工具
+    function makeTable(title, rows) {
+        if (rows.length === 0) return "";
+
+        return `
+            <h3>${title}</h3>
+            <table>
+                <thead>
+                    <tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>
+                </thead>
+                <tbody>
+                    ${rows
+                        .map(r => `<tr>${r.map(x => `<td>${x}</td>`).join("")}</tr>`)
+                        .join("")}
+                </tbody>
+            </table>
+            <br>
+        `;
+    }
+
+    html += makeTable("A 組成績", A);
+    html += makeTable("B 組成績", B);
+
+    document.getElementById("historyResult").innerHTML = html;
+}
+
+
+
+
+// ⭐ 預設顯示最新消息
+renderNews();
+
+</script>
+
+</body>
+</html>
