@@ -10,8 +10,8 @@
     header { text-align: center; padding: 10px 0; background: #222; color: #fff; }
 
     /* 輪播 */
-    .carousel { width: 100%; height: 250px; overflow: hidden; position: relative; }
-    .carousel img { width: 100%; height: 250px; object-fit: cover; position: absolute; transition: opacity 1s; opacity: 0; }
+    .carousel { width: 100%; height: 300px; overflow: hidden; position: relative; }
+    .carousel img { width: 100%; height: 300px; object-fit: cover; position: absolute; transition: opacity 1s; opacity: 0; }
 
     /* 主選單 */
     nav {
@@ -166,23 +166,35 @@ const NEWS_ITEMS = [
 
 ];
 
-// 🌟 輪播
-const carouselImages = ["assets/1.jpg", "assets/2.jpg"];
-let carouselIndex = 0;
+// 🌟 輪播（自動載入 assets/1.jpg ~ assets/20.jpg）
 const carouselDiv = document.getElementById("carousel");
+let carouselIndex = 0;
+const carouselImages = [];
 
-carouselImages.forEach((src, i) => {
+const MAX_IMAGES = 20; // 你預期最多放幾張
+
+for (let i = 1; i <= MAX_IMAGES; i++) {
   const img = document.createElement("img");
-  img.src = src;
-  if (i === 0) img.style.opacity = 1;
-  carouselDiv.appendChild(img);
-});
+  img.src = `assets/${i}.jpg`;
+
+  img.onload = () => {
+    if (carouselImages.length === 0) {
+      img.style.opacity = 1;
+    }
+    carouselDiv.appendChild(img);
+    carouselImages.push(img);
+  };
+
+  // 如果圖片不存在，直接忽略
+  img.onerror = () => {};
+}
 
 setInterval(() => {
-  const imgs = carouselDiv.children;
-  imgs[carouselIndex].style.opacity = 0;
-  carouselIndex = (carouselIndex + 1) % imgs.length;
-  imgs[carouselIndex].style.opacity = 1;
+  if (carouselImages.length <= 1) return;
+
+  carouselImages[carouselIndex].style.opacity = 0;
+  carouselIndex = (carouselIndex + 1) % carouselImages.length;
+  carouselImages[carouselIndex].style.opacity = 1;
 }, 3000);
 
 
@@ -505,45 +517,60 @@ async function loadHistorySeasonList() {
     const rows = text.split(/\r?\n/).map(r => r.split(","));
     const data = rows.slice(1).filter(r => r.length > 1);
 
-    // 取得所有賽季（避免重複）
-    const seasons = [...new Set(data.map(r => r[0]))];
+    /*
+      欄位假設：
+      [0] 排序碼（202601）
+      [1] 賽季文字（2026第一季）
+      [2] 組別
+      [3] 獎項
+      [4] 隊伍
+    */
 
-    // 排序（時間晚的放前面）
-    seasons.sort().reverse();
+    // 建立 Map：排序碼 → 賽季名稱（避免重複）
+    const seasonMap = new Map();
+    data.forEach(r => {
+        seasonMap.set(r[0], r[1]);
+    });
+
+    // 依排序碼「數字大到小」排序
+    const sortedKeys = [...seasonMap.keys()]
+        .map(k => Number(k))
+        .sort((a, b) => b - a);
 
     const select = document.getElementById("historySelect");
-    seasons.forEach(s => {
+    select.innerHTML = "";
+
+    sortedKeys.forEach(key => {
         const opt = document.createElement("option");
-        opt.value = s;
-        opt.textContent = s;
+        opt.value = key;                  // 用排序碼當 value
+        opt.textContent = seasonMap.get(String(key)); // 顯示賽季文字
         select.appendChild(opt);
     });
 
-    // 預設載入最新一季
+    // 預設載入最新一季（排序後第一筆）
     loadHistorySeason();
 }
 
 // 顯示特定賽季的 A、B 組成績
 async function loadHistorySeason() {
-    const season = document.getElementById("historySelect").value;
+    const seasonKey = document.getElementById("historySelect").value;
 
     const res = await fetch(HISTORY_CSV_URL);
     const text = await res.text();
 
     const rows = text.split(/\r?\n/).map(r => r.split(","));
-    const headers = rows[0];
+    const headers = rows[0].slice(1); // ❗不顯示排序碼欄
     const data = rows.slice(1).filter(r => r.length > 1);
 
-    // 篩選挑出該賽季的資料
-    const filtered = data.filter(r => r[0] === season);
+    // 篩選該賽季（用排序碼）
+    const filtered = data.filter(r => r[0] === seasonKey);
 
-    // A / B 組資料
-    const A = filtered.filter(r => r[1] === "A組");
-    const B = filtered.filter(r => r[1] === "B組");
+    // A / B 組
+    const A = filtered.filter(r => r[2] === "A組");
+    const B = filtered.filter(r => r[2] === "B組");
 
     let html = "";
 
-    // 建立表格工具
     function makeTable(title, rows) {
         if (rows.length === 0) return "";
 
@@ -555,7 +582,11 @@ async function loadHistorySeason() {
                 </thead>
                 <tbody>
                     ${rows
-                        .map(r => `<tr>${r.map(x => `<td>${x}</td>`).join("")}</tr>`)
+                        .map(r => `
+                            <tr>
+                                ${r.slice(1).map(x => `<td>${x}</td>`).join("")}
+                            </tr>
+                        `)
                         .join("")}
                 </tbody>
             </table>
@@ -568,9 +599,6 @@ async function loadHistorySeason() {
 
     document.getElementById("historyResult").innerHTML = html;
 }
-
-
-
 
 // ⭐ 預設顯示最新消息
 renderNews();
